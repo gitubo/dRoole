@@ -35,7 +35,8 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     char node_id[37];
     char ip_address[46];
-    uint16_t port;
+    uint16_t tcp_port;  
+    uint16_t udp_port;
     uint16_t role; 
 } JoinRequestPayload;
 

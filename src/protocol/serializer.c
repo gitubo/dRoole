@@ -14,14 +14,35 @@
 #endif
 
 void serializer_pack_rpc(const RpcHeader *src, uint8_t *dest) {
-    RpcHeader *out = (RpcHeader *)dest;
-    out->magic = htonl(src->magic);
-    out->version = htons(src->version);
-    out->command_type = htons(src->command_type);
-    out->payload_len = htobe64(src->payload_len);
-    // Strings are single-byte arrays, no endianness swap needed
-    memcpy(out->origin_id, src->origin_id, sizeof(out->origin_id));
-    memcpy(out->request_id, src->request_id, sizeof(out->request_id));
+    size_t offset = 0;
+    
+    // Pack magic (4 bytes)
+    uint32_t magic = htonl(src->magic);
+    memcpy(dest + offset, &magic, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    
+    // Pack version (2 bytes)
+    uint16_t version = htons(src->version);
+    memcpy(dest + offset, &version, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
+    
+    // Pack command_type (2 bytes)
+    uint16_t command_type = htons(src->command_type);
+    memcpy(dest + offset, &command_type, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
+    
+    // Pack payload_len (8 bytes)
+    uint64_t payload_len = htobe64(src->payload_len);
+    memcpy(dest + offset, &payload_len, sizeof(uint64_t));
+    offset += sizeof(uint64_t);
+    
+    // Pack origin_id (37 bytes) - strings are byte arrays, no endian conversion
+    memcpy(dest + offset, src->origin_id, MAX_NODE_ID);
+    offset += MAX_NODE_ID;
+    
+    // Pack request_id (37 bytes)
+    memcpy(dest + offset, src->request_id, MAX_NODE_ID);
+    // offset += MAX_NODE_ID;  // Uncomment if more fields follow
 }
 
 void serializer_unpack_rpc(const uint8_t *src, RpcHeader *dest) {

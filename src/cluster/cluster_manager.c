@@ -1,6 +1,5 @@
-/* src/cluster/cluster_manager.c */
-#include "cluster/cluster_manager.h"
-#include "protocol/rpc_protocol.h"
+#include "../../include/cluster/cluster_manager.h"
+#include "../../include/protocol/rpc_protocol.h"
 #include "protocol/serializer.h"
 #include "common/logger.h"
 #include <string.h>
@@ -11,7 +10,8 @@ static void create_join_payload(ClusterManager *cm, JoinRequestPayload *payload)
     memset(payload, 0, sizeof(JoinRequestPayload));
     strncpy(payload->node_id, cm->self.node_id, sizeof(payload->node_id) - 1);
     strncpy(payload->ip_address, cm->self.ip_address, sizeof(payload->ip_address) - 1);
-    payload->port = cm->self.port;
+    payload->tcp_port = cm->self.tcp_port;
+    payload->udp_port = cm->self.udp_port;
     payload->role = (uint16_t)cm->self.role;
 }
 
@@ -94,10 +94,6 @@ void cluster_leave(ClusterManager *cm) {
     // Ideally, we would flush this to the UDP socket here
     // But since this function is pure logic, we might just set the flag 
     // and let the next tick handle the transmission if the loop is still running.
-}
-
-int cluster_handle_join_req(ClusterManager *cm, const JoinRequestPayload *req, TcpConnection *client) {
-    // ... logic provided in previous response ...
 }
 
 int cluster_handle_join_req(ClusterManager *cm, const JoinRequestPayload *req, TcpConnection *client) {

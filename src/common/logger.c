@@ -74,28 +74,24 @@ void *logger_worker(void *arg) {
 
 // 4. Frontend API (The Producer) - LOCK FREE
 void log_msg(LogLevel level, const char *fmt, ...) {
-    size_t w = atomic_load(&write_idx);
-    size_t r = atomic_load(&read_idx);
-
-    // Check if buffer is full
-    if (w - r >= LOG_BUFFER_SIZE) {
-        // Strategy: Drop log if full to preserve engine stability
-        return; 
-    }
-
+    size_t w = atomic_load_explicit(&write_idx, memory_order_relaxed);
+    size_t r = atomic_load_explicit(&read_idx, memory_order_acquire);
+    
+    if (w - r >= LOG_BUFFER_SIZE) return;
+    
     size_t mask_idx = w & (LOG_BUFFER_SIZE - 1);
     LogEntry *entry = &ring_buffer[mask_idx];
-
+    
     entry->timestamp = get_time_ms();
     entry->level = level;
-
     va_list args;
     va_start(args, fmt);
     vsnprintf(entry->message, LOG_MSG_LEN, fmt, args);
     va_end(args);
-
-    // Commit the write
-    atomic_fetch_add(&write_idx, 1);
+    
+    // Ensure writes complete before publishing index
+    atomic_thread_fence(memory_order_release);
+    atomic_store_explicit(&write_idx, w + 1, memory_order_release);
 }
 
 // Initialization

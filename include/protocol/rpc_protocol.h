@@ -3,7 +3,7 @@
 
 #include "../common/types.h"
 #include "../transport/tcp_transport.h"
-#include "protocol_defs.h" // Essential for RpcHeader
+#include "protocol_defs.h" 
 
 int rpc_send_message(TcpConnection *conn, RpcHeader *header, const void *payload);
 int rpc_recv_message(TcpConnection *conn, RpcHeader *header, void **payload_out);
