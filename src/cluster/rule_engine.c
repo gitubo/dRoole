@@ -1,4 +1,4 @@
-#include "../../include/structures/types.h"
+#include "../../include/common/types.h"
 #include <stdio.h>
 #include <string.h>
 

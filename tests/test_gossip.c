@@ -2,13 +2,13 @@
 #define _DEFAULT_SOURCE
 #endif
 
-#include "../include/net/udp_transport.h"
-#include "../include/proto/protocol_defs.h"
-#include "../include/proto/serializer.h"
+#include "../include/transport/udp_transport.h"
+#include "../include/protocol/protocol_defs.h"
+#include "../include/protocol/serializer.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include <unistd.h> // Correct header for usleep
+#include <unistd.h> 
 
 /**
  * Main test entry for Gossip protocol serialization and UDP non-blocking transport.

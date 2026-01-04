@@ -26,4 +26,24 @@ typedef struct __attribute__((packed)) {
     // Payload can be appended here (e.g., events)
 } GossipPacket;
 
+// Command Types for RPC
+#define RPC_CMD_JOIN_REQ    0x01
+#define RPC_CMD_JOIN_RESP   0x02
+#define RPC_CMD_LEAVE       0x03
+
+// Payload for Join Request
+typedef struct __attribute__((packed)) {
+    char node_id[37];
+    char ip_address[46];
+    uint16_t port;
+    uint16_t role; 
+} JoinRequestPayload;
+
+// Payload for Join Response (Simplified Snapshot)
+typedef struct __attribute__((packed)) {
+    uint32_t status;        // 0=OK, 1=REJECT
+    uint32_t member_count;
+    // Followed by member_count * NodeInfo
+} JoinResponseHeader;
+
 #endif

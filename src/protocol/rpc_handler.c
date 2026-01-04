@@ -1,6 +1,6 @@
-#include "../../include/proto/rpc_protocol.h"
-#include "../../include/net/tcp_transport.h"
-#include "../../include/proto/protocol_defs.h" 
+#include "../../include/protocol/rpc_protocol.h"
+#include "../../include/transport/tcp_transport.h"
+#include "../../include/protocol/protocol_defs.h" 
 #include <stdlib.h>
 #include <stdio.h>
 

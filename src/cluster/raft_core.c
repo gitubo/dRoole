@@ -1,7 +1,7 @@
-#include "../../include/core/event_loop.h"
-#include "../../include/net/udp_transport.h"
-#include "../../include/proto/serializer.h"
-#include "../../include/proto/protocol_defs.h" 
+#include "../../include/common/event_loop.h"
+#include "../../include/transport/udp_transport.h"
+#include "../../include/protocol/serializer.h"
+#include "../../include/protocol/protocol_defs.h" 
 #include <stdio.h>
 #include <unistd.h>
 
