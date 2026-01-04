@@ -1,18 +1,32 @@
 #ifndef KV_STORE_H
 #define KV_STORE_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include "../common/types.h"
 
-typedef struct {
-    char *key;
-    char *value;
-} kv_entry_t;
+/*
+ * Key → RuleConfig store
+ * Used by Control nodes to manage rules
+ * Used by Worker nodes to apply synced rules
+ */
 
-// Basic operations for the Control Plane state machine
-int kv_init();
-int kv_set(const char *key, const char *value);
-char* kv_get(const char *key);
-void kv_destroy();
+int kv_init(void);
+
+/*
+ * Update or insert rules for a given key
+ * Ownership of rule list remains with caller
+ */
+int kv_update_rule(const char *key, Rule *rules);
+
+/*
+ * Retrieve rules for a key
+ * Returns NULL if key not found
+ */
+Rule *kv_get_rules(const char *key);
+
+/*
+ * Free all stored rules (shutdown only)
+ */
+void kv_destroy(void);
 
 #endif

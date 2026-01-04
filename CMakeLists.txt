@@ -24,5 +24,5 @@ target_link_libraries(server pthread)
 
 # Tests
 enable_testing()
-add_executable(test_udp tests/test_udp.c ${SRC_TRANSPORT} ${SRC_PROTO})
+add_executable(test_udp tests/test_udp.c ${SRC_TRANSPORT} ${SRC_PROTO} ${SRC_CLUSTER} ${SRC_COMMON})
 add_test(NAME UDP_Test COMMAND test_udp)

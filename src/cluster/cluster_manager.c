@@ -1,123 +1,141 @@
-#include "../../include/cluster/cluster_manager.h"
-#include "../../include/protocol/rpc_protocol.h"
+#include "cluster/cluster_manager.h"
 #include "protocol/serializer.h"
+#include "protocol/protocol_defs.h"
 #include "common/logger.h"
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
-// Helper to create the payload
-static void create_join_payload(ClusterManager *cm, JoinRequestPayload *payload) {
-    memset(payload, 0, sizeof(JoinRequestPayload));
-    strncpy(payload->node_id, cm->self.node_id, sizeof(payload->node_id) - 1);
-    strncpy(payload->ip_address, cm->self.ip_address, sizeof(payload->ip_address) - 1);
-    payload->tcp_port = cm->self.tcp_port;
-    payload->udp_port = cm->self.udp_port;
-    payload->role = (uint16_t)cm->self.role;
+static void ensure_capacity(ClusterManager *cm) {
+    if (cm->member_count < cm->member_capacity) return;
+    cm->member_capacity = cm->member_capacity ? cm->member_capacity * 2 : 8;
+    cm->members = realloc(cm->members,
+                           cm->member_capacity * sizeof(NodeInfo));
 }
 
-int cluster_join(ClusterManager *cm, const char *seed_ip, uint16_t seed_port) {
-    if (cm->state != CLUSTER_STATE_INIT) {
-        LOG_ERR("Cannot join: Node is not in INIT state");
-        return -1;
-    }
-
-    LOG_INFO("Initiating Cluster Join to Seed %s:%d", seed_ip, seed_port);
-    cm->state = CLUSTER_STATE_JOINING;
-
-    // 1. Establish temporary TCP connection to seed
-    TcpConnection conn;
-    if (tcp_client_connect(seed_ip, seed_port, &conn) != 0) {
-        LOG_ERR("Failed to connect to seed node");
-        cm->state = CLUSTER_STATE_ISOLATED;
-        return -1;
-    }
-
-    // 2. Prepare Join Request
-    JoinRequestPayload payload;
-    create_join_payload(cm, &payload);
-
-    RpcHeader header = {
-        .magic = RPC_MAGIC,
-        .version = 1,
-        .command_type = RPC_CMD_JOIN_REQ,
-        .payload_len = sizeof(JoinRequestPayload)
-    };
-    strncpy(header.origin_id, cm->self.node_id, sizeof(header.origin_id));
-
-    // 3. Serialize and Send
-    uint8_t header_buf[sizeof(RpcHeader)];
-    serializer_pack_rpc(&header, header_buf);
-
-    if (tcp_send_all(&conn, header_buf, sizeof(header_buf)) != 0 ||
-        tcp_send_all(&conn, &payload, sizeof(payload)) != 0) {
-        LOG_ERR("Failed to send JOIN_REQ");
-        tcp_close(&conn);
-        return -1;
-    }
-
-    // 4. Wait for Response (Blocking for simplicity in startup phase)
-    // In a pure reactor, this would be a separate state callback.
-    RpcHeader resp_header;
-    if (tcp_recv_all(&conn, header_buf, sizeof(header_buf)) != 0) {
-        LOG_ERR("Failed to receive JOIN confirmation");
-        tcp_close(&conn);
-        return -1;
-    }
-    serializer_unpack_rpc(header_buf, &resp_header);
-
-    if (resp_header.command_type == RPC_CMD_JOIN_RESP) {
-        LOG_INFO("Joined Cluster Successfully!");
-        cm->state = CLUSTER_STATE_ACTIVE;
-        // Parse payload here to populate cm->members...
-    } else {
-        LOG_WARN("Received unexpected RPC response: %d", resp_header.command_type);
-    }
-
-    tcp_close(&conn);
+int cluster_init(ClusterManager *cm, NodeRole role,
+                 const char *node_id,
+                 const char *bind_ip,
+                 uint16_t port) {
+    memset(cm, 0, sizeof(*cm));
+    strncpy(cm->self.node_id, node_id, 36);
+    strncpy(cm->self.ip_address, bind_ip, 45);
+    cm->self.tcp_port = port;
+    cm->self.udp_port = port;
+    cm->self.role = role;
+    cm->self.status = NODE_STATUS_ALIVE;
+    cm->self.last_updated_ts = time(NULL);
+    cm->state = CLUSTER_STATE_INIT;
     return 0;
 }
 
-void cluster_leave(ClusterManager *cm) {
-    if (cm->state == CLUSTER_STATE_LEAVING || cm->state == CLUSTER_STATE_INIT) return;
-
-    LOG_INFO("Leaving cluster...");
-    cm->state = CLUSTER_STATE_LEAVING;
-
-    // Broadcast leave message via Gossip (Best effort)
-    GossipPacket leave_pkt = {
-        .magic = GOSSIP_MAGIC,
-        .type = 3, // SUSPECT/LEAVE type
-        .sequence = (uint32_t)cm->current_term // or time
-    };
-    strncpy(leave_pkt.node_id, cm->self.node_id, sizeof(leave_pkt.node_id));
-    
-    // Ideally, we would flush this to the UDP socket here
-    // But since this function is pure logic, we might just set the flag 
-    // and let the next tick handle the transmission if the loop is still running.
+int cluster_update_member_status(ClusterManager *cm,
+                                 const char *node_id,
+                                 NodeStatus status) {
+    for (size_t i = 0; i < cm->member_count; i++) {
+        if (strcmp(cm->members[i].node_id, node_id) == 0) {
+            cm->members[i].status = status;
+            cm->members[i].last_updated_ts = time(NULL);
+            return 1;
+        }
+    }
+    return 0;
 }
 
-int cluster_handle_join_req(ClusterManager *cm, const JoinRequestPayload *req, TcpConnection *client) {
-    LOG_INFO("Handling JOIN_REQ from %s (%s:%d)", req->node_id, req->ip_address, req->port);
+int cluster_handle_join_req(ClusterManager *cm,
+                            const JoinRequestPayload *req,
+                            TcpConnection *client) {
+    ensure_capacity(cm);
 
-    // 1. Add new node to our member list
-    NodeInfo new_node;
-    strncpy(new_node.node_id, req->node_id, 37);
-    strncpy(new_node.ip_address, req->ip_address, 46);
-    new_node.port = req->port;
-    new_node.role = (NodeRole)req->role;
-    new_node.status = NODE_STATUS_ALIVE;
-    
-    // (Logic to add to cm->members array omitted for brevity)
-    
-    // 2. Send Response
+    NodeInfo *n = &cm->members[cm->member_count++];
+    memset(n, 0, sizeof(*n));
+    strncpy(n->node_id, req->node_id, 36);
+    strncpy(n->ip_address, req->ip_address, 45);
+    n->tcp_port = req->tcp_port;
+    n->udp_port = req->udp_port;
+    n->role = req->role;
+    n->status = NODE_STATUS_ALIVE;
+    n->last_updated_ts = time(NULL);
+
+    size_t payload_len =
+        sizeof(JoinResponseHeader) +
+        cm->member_count * sizeof(NodeInfo);
+
+    JoinResponseHeader hdr = {
+        .status = 0,
+        .member_count = cm->member_count
+    };
+
+    uint8_t *payload = malloc(payload_len);
+    memcpy(payload, &hdr, sizeof(hdr));
+    memcpy(payload + sizeof(hdr),
+           cm->members,
+           cm->member_count * sizeof(NodeInfo));
+
     RpcHeader resp = {
         .magic = RPC_MAGIC,
         .version = 1,
         .command_type = RPC_CMD_JOIN_RESP,
-        .payload_len = 0 // For now, just ACK
+        .payload_len = payload_len
     };
-    
-    uint8_t buf[sizeof(RpcHeader)];
-    serializer_pack_rpc(&resp, buf);
-    return tcp_send_all(client, buf, sizeof(buf));
+
+    uint8_t hbuf[sizeof(RpcHeader)];
+    serializer_pack_rpc(&resp, hbuf);
+
+    tcp_send_all(client, hbuf, sizeof(hbuf));
+    tcp_send_all(client, payload, payload_len);
+    free(payload);
+    return 0;
+}
+
+int cluster_join(ClusterManager *cm,
+                 const char *seed_ip,
+                 uint16_t seed_port) {
+    TcpConnection conn;
+    if (tcp_client_connect(seed_ip, seed_port, &conn) != 0)
+        return -1;
+
+    JoinRequestPayload req = {0};
+    strncpy(req.node_id, cm->self.node_id, 36);
+    strncpy(req.ip_address, cm->self.ip_address, 45);
+    req.tcp_port = cm->self.tcp_port;
+    req.udp_port = cm->self.udp_port;
+    req.role = cm->self.role;
+
+    RpcHeader hdr = {
+        .magic = RPC_MAGIC,
+        .version = 1,
+        .command_type = RPC_CMD_JOIN_REQ,
+        .payload_len = sizeof(req)
+    };
+
+    uint8_t hbuf[sizeof(hdr)];
+    serializer_pack_rpc(&hdr, hbuf);
+
+    tcp_send_all(&conn, hbuf, sizeof(hbuf));
+    tcp_send_all(&conn, &req, sizeof(req));
+
+    serializer_unpack_rpc(hbuf, &hdr);
+    tcp_recv_all(&conn, hbuf, sizeof(hbuf));
+    serializer_unpack_rpc(hbuf, &hdr);
+
+    uint8_t *payload = malloc(hdr.payload_len);
+    tcp_recv_all(&conn, payload, hdr.payload_len);
+
+    JoinResponseHeader *resp = (JoinResponseHeader *)payload;
+    NodeInfo *nodes = (NodeInfo *)(payload + sizeof(*resp));
+
+    for (uint32_t i = 0; i < resp->member_count; i++) {
+        ensure_capacity(cm);
+        cm->members[cm->member_count++] = nodes[i];
+    }
+
+    free(payload);
+    tcp_close(&conn);
+    cm->state = CLUSTER_STATE_ACTIVE;
+    return 0;
+}
+
+void cluster_leave(ClusterManager *cm) {
+    cm->state = CLUSTER_STATE_LEAVING;
 }

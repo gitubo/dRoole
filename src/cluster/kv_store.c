@@ -1,42 +1,52 @@
-#include "../../include/common/types.h"
+#include "cluster/kv_store.h"
 #include <stdlib.h>
 #include <string.h>
 
 #define MAX_KV_ENTRIES 1024
 
-static RuleConfig *local_store[MAX_KV_ENTRIES];
+static RuleConfig *store[MAX_KV_ENTRIES];
 static int store_count = 0;
 
-/**
- * Adds a rule to the local eventually-consistent store.
- * (This would be called by the Gossip/Config sync layer).
- */
-int kv_update_rule(const char *key, Rule *new_rules) {
+int kv_init(void) {
+    memset(store, 0, sizeof(store));
+    store_count = 0;
+    return 0;
+}
+
+int kv_update_rule(const char *key, Rule *rules) {
     for (int i = 0; i < store_count; i++) {
-        if (strcmp(local_store[i]->key, key) == 0) {
-            local_store[i]->rule_head = new_rules;
+        if (strcmp(store[i]->key, key) == 0) {
+            store[i]->rule_head = rules;
             return 0;
         }
     }
 
-    if (store_count < MAX_KV_ENTRIES) {
-        RuleConfig *entry = malloc(sizeof(RuleConfig));
-        strncpy(entry->key, key, 63);
-        entry->rule_head = new_rules;
-        local_store[store_count++] = entry;
-        return 0;
-    }
-    return -1;
+    if (store_count >= MAX_KV_ENTRIES)
+        return -1;
+
+    RuleConfig *cfg = malloc(sizeof(RuleConfig));
+    if (!cfg) return -1;
+
+    memset(cfg, 0, sizeof(*cfg));
+    strncpy(cfg->key, key, sizeof(cfg->key) - 1);
+    cfg->rule_head = rules;
+
+    store[store_count++] = cfg;
+    return 0;
 }
 
-/**
- * Finds rules associated with a message type.
- */
-Rule* kv_get_rules(const char *key) {
+Rule *kv_get_rules(const char *key) {
     for (int i = 0; i < store_count; i++) {
-        if (strcmp(local_store[i]->key, key) == 0) {
-            return local_store[i]->rule_head;
+        if (strcmp(store[i]->key, key) == 0) {
+            return store[i]->rule_head;
         }
     }
     return NULL;
+}
+
+void kv_destroy(void) {
+    for (int i = 0; i < store_count; i++) {
+        free(store[i]);
+    }
+    store_count = 0;
 }

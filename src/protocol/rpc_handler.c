@@ -6,16 +6,23 @@
 #include "../../include/protocol/rpc_protocol.h"
 #include "../../include/protocol/serializer.h"
 #include "../../include/protocol/protocol_defs.h"
+#include "../../include/protocol/rpc_handler.h"
 #include "../../include/transport/tcp_transport.h"
 #include "../../include/common/event_loop.h"
 #include "../../include/common/logger.h"
 #include "../../include/common/types.h"
+#include "../../include/cluster/cluster_manager.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/socket.h>
+
+// Forward declaration for callbacks
+static void rpc_on_client_event(void *context, int fd, uint32_t events); 
 
 #define MAX_PAYLOAD_SIZE (10 * 1024 * 1024)  // 10MB
+
 
 // ============================================================================
 // CLIENT-SIDE FUNCTIONS (Synchronous - for outgoing requests)
@@ -242,10 +249,11 @@ static int handle_processing(ClientSession *session) {
             
             JoinRequestPayload *req = (JoinRequestPayload *)session->payload_buf;
             LOG_INFO("JOIN_REQ from node %s at %s:%d", 
-                     req->node_id, req->ip_address, req->port);
+                     req->node_id, req->ip_address, req->tcp_port);
             
-            // TODO: Call cluster_handle_join_req(session->app_context, req, &session->conn);
-            
+            ClusterManager *cm = (ClusterManager *)session->app_context;
+            cluster_handle_join_req(cm, req, &session->conn);
+
             RpcHeader resp_header = {
                 .magic = RPC_MAGIC,
                 .version = 1,
