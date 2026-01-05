@@ -28,7 +28,8 @@ typedef struct {
 void handle_shutdown(int sig) {
     (void)sig;
     if (global_loop) {
-        LOG_WARN("Shutdown signal received");
+        // REMOVED: LOG_WARN("Shutdown signal received"); 
+        // Signals should do minimal work. Just stop the loop.
         loop_stop(global_loop);
     }
 }
@@ -157,6 +158,7 @@ int main(int argc, char *argv[]) {
 
     LOG_INFO("Node started: %s", node_id);
     loop_run(loop);
+    LOG_INFO("Event loop stopped. Shutting down...");
 
     cluster_leave(&ctx.cluster);
     udp_close(&ctx.gossip_sock);

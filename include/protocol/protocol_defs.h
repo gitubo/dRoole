@@ -1,3 +1,7 @@
+//####################
+// /include/protocol/protocol_defs.h
+// ####################
+
 #ifndef PROTOCOL_DEFS_H
 #define PROTOCOL_DEFS_H
 
@@ -40,5 +44,11 @@ typedef struct __attribute__((packed)) {
     uint32_t status;
     uint32_t member_count;
 } JoinResponseHeader;
+
+// NEW: Header for Rule Synchronization
+typedef struct __attribute__((packed)) {
+    char key[64];
+    uint32_t rule_count;
+} SyncRulesHeader;
 
 #endif

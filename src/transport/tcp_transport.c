@@ -170,14 +170,11 @@ int tcp_recv_all(TcpConnection *conn, void *buffer, size_t len) {
     
     while (remaining > 0) {
         ssize_t received = recv(conn->sockfd, ptr, remaining, 0);
-        
         if (received < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) return -1; 
             return -1;
         }
-        if (received == 0) {
-            return -1; // Connection closed by peer
-        }
+        if (received == 0) return -1; // Connection closed
         
         ptr += received;
         remaining -= received;

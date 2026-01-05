@@ -1,3 +1,7 @@
+//####################
+// /include/cluster/cluster_manager.h
+// ####################
+
 #ifndef CLUSTER_MANAGER_H
 #define CLUSTER_MANAGER_H
 
@@ -31,9 +35,13 @@ int cluster_init(ClusterManager *cm, NodeRole role,
                  uint16_t port);
 
 int cluster_join(ClusterManager *cm, const char *seed_ip, uint16_t seed_port);
+
+// CHANGED: Decoupled network transport from logic. 
+// Now returns payload buffer and length via pointers.
 int cluster_handle_join_req(ClusterManager *cm,
                             const JoinRequestPayload *req,
-                            TcpConnection *client);
+                            uint8_t **out_payload,
+                            size_t *out_len);
 
 int cluster_update_member_status(ClusterManager *cm,
                                  const char *node_id,
