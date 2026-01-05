@@ -2,6 +2,7 @@
 #define EVENT_LOOP_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 typedef enum {
     EVENT_READ  = 1 << 0,  // File descriptor ready for reading
@@ -172,5 +173,22 @@ int loop_del_fd(EventLoop *loop, int fd);
  */
 int loop_add_timer(EventLoop *loop, uint32_t interval_ms, 
                    event_callback_t cb, void *context);
+
+/**
+ * Emergency shutdown: Close all registered file descriptors
+ * 
+ * This forcibly closes all FDs registered with the event loop.
+ * Use this ONLY during shutdown when you need to ensure all
+ * resources are released immediately.
+ * 
+ * IMPORTANT: This will break any ongoing I/O operations!
+ * Only call this after loop_stop() and when no callbacks are running.
+ * 
+ * @param loop: EventLoop instance
+ * @param exclude_fds: Array of FDs to NOT close (e.g., stdout, stderr)
+ * @param exclude_count: Number of FDs in exclude array
+ */
+void loop_emergency_close_all(EventLoop *loop, const int *exclude_fds, size_t exclude_count);
+
 
 #endif // EVENT_LOOP_H

@@ -358,3 +358,35 @@ void loop_run(EventLoop *loop) {
         }
     }
 }
+
+
+void loop_emergency_close_all(EventLoop *loop, const int *exclude_fds, size_t exclude_count) {
+    if (!loop) return;
+    
+    int closed_count = 0;
+    
+    for (int i = 0; i < FD_HASH_SIZE; i++) {
+        FileContext *fc = loop->fd_table[i];
+        while (fc != NULL) {
+            int should_close = 1;
+            
+            // Check if this FD should be excluded
+            for (size_t j = 0; j < exclude_count; j++) {
+                if (fc->fd == exclude_fds[j]) {
+                    should_close = 0;
+                    break;
+                }
+            }
+            
+            if (should_close && fc->fd >= 0) {
+                fprintf(stderr, "[EMERGENCY] Force-closing fd=%d\n", fc->fd);
+                close(fc->fd);
+                closed_count++;
+            }
+            
+            fc = fc->next;
+        }
+    }
+    
+    fprintf(stderr, "[EMERGENCY] Closed %d file descriptors\n", closed_count);
+}
