@@ -57,8 +57,25 @@ void *logger_worker(void *arg) {
         while (r != w) {
             size_t mask_idx = r & (LOG_BUFFER_SIZE - 1);
             LogEntry *entry = &ring_buffer[mask_idx];
-            const char *level_str = (entry->level == LOG_ERROR) ? "ERR" : 
-                                    (entry->level == LOG_WARN) ? "WRN" : "INF";
+            const char *level_str;
+
+            switch (entry->level) {
+                case LOG_ERROR:
+                    level_str = "ERR";
+                    break;
+                case LOG_WARN:
+                    level_str = "WARN";
+                    break;
+                case LOG_INFO:
+                    level_str = "INFO";
+                    break;
+                case LOG_DEBUG:
+                    level_str = "DEBUG";
+                    break;
+                default:
+                    level_str = "UNKNOWN";
+                    break;
+            }
             
             // Write to file (if open)
             if (fp_file) fprintf(fp_file, "[%lu] [%s] %s\n", entry->timestamp, level_str, entry->message);

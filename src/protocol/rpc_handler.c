@@ -450,37 +450,56 @@ void rpc_on_client_event(void *context, int fd, uint32_t events) {
     
     LOG_DEBUG("Event on fd=%d: state=%s, events=0x%x", 
               session->conn.sockfd, state_to_string(session->state), events);
-    
-    // Process current state
+
+    // CHANGED: Loop to handle state transitions that don't require I/O wait (e.g., PROCESSING)
     int result = 0;
-    switch (session->state) {
-        case SESSION_READING_HEADER:
-            if (events & EVENT_READ) {
-                result = handle_reading_header(session);
-            }
-            break;
+    int keep_processing = 1;
+
+    while (keep_processing && result == 0) {
+        keep_processing = 0; // Default: exit loop after one pass unless state requires immediate action
+
+        switch (session->state) {
+            case SESSION_READING_HEADER:
+                if (events & EVENT_READ) {
+                    result = handle_reading_header(session);
+                    // Optimistic: If header read complete, we could try reading payload immediately,
+                    // but for now, we only force loop if we hit PROCESSING.
+                    if (session->state == SESSION_PROCESSING) keep_processing = 1;
+                    else if (session->state == SESSION_READING_PAYLOAD) {
+                         // Optional: could set keep_processing=1 here to try reading payload immediately
+                    }
+                }
+                break;
+
+            case SESSION_READING_PAYLOAD:
+                if (events & EVENT_READ) {
+                    result = handle_reading_payload(session);
+                    // CRITICAL FIX: If payload finished, we moved to PROCESSING.
+                    // We MUST loop again to execute processing logic immediately.
+                    if (session->state == SESSION_PROCESSING) {
+                        keep_processing = 1; 
+                    }
+                }
+                break;
+
+            case SESSION_PROCESSING:
+                // Processing logic is CPU-bound and blocking, run immediately
+                result = handle_processing(session);
+                // After processing, we are in SENDING_RESPONSE or DONE.
+                // We usually stop here to wait for the WRITE event (registered in handle_processing).
+                break;
             
-        case SESSION_READING_PAYLOAD:
-            if (events & EVENT_READ) {
-                result = handle_reading_payload(session);
-            }
-            break;
-            
-        case SESSION_PROCESSING:
-            // Processing doesn't wait for events, runs immediately
-            result = handle_processing(session);
-            break;
-            
-        case SESSION_SENDING_RESPONSE:
-            if (events & EVENT_WRITE) {
-                result = handle_sending_response(session);
-            }
-            break;
-            
-        case SESSION_DONE:
-            LOG_DEBUG("Session in DONE state, destroying");
-            result = -1;
-            break;
+            case SESSION_SENDING_RESPONSE:
+                if (events & EVENT_WRITE) {
+                    result = handle_sending_response(session);
+                }
+                break;
+
+            case SESSION_DONE:
+                LOG_DEBUG("Session in DONE state, destroying");
+                result = -1;
+                break;
+        }
     }
     
     // If any handler returned error or we're done, cleanup

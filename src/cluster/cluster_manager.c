@@ -79,18 +79,26 @@ int cluster_handle_join_req(ClusterManager *cm,
                             const JoinRequestPayload *req,
                             uint8_t **out_payload,
                             size_t *out_len) {
+
+    uint16_t req_tcp_port = ntohs(req->tcp_port);
+    uint16_t req_udp_port = ntohs(req->udp_port);
+    uint16_t req_role = ntohs(req->role);
+
     LOG_DEBUG("Handling JOIN_REQ: node_id=%s, ip=%s, tcp_port=%d, udp_port=%d, role=%d",
-              req->node_id, req->ip_address, req->tcp_port, req->udp_port, req->role);
+              req->node_id, req->ip_address, req_tcp_port, req_udp_port, req_role);    
     
     // Check if node already exists
     for (size_t i = 0; i < cm->member_count; i++) {
         if (strcmp(cm->members[i].node_id, req->node_id) == 0) {
             LOG_WARN("Node %s already exists in cluster, updating info", req->node_id);
-            // Update existing node instead of adding duplicate
+            // Update existing node
             strncpy(cm->members[i].ip_address, req->ip_address, 45);
-            cm->members[i].tcp_port = req->tcp_port;
-            cm->members[i].udp_port = req->udp_port;
-            cm->members[i].role = req->role;
+            
+            // FIX: Use host-order variables
+            cm->members[i].tcp_port = req_tcp_port;
+            cm->members[i].udp_port = req_udp_port;
+            cm->members[i].role = req_role; 
+            
             cm->members[i].status = NODE_STATUS_ALIVE;
             cm->members[i].last_updated_ts = time(NULL);
             goto build_response;
@@ -111,9 +119,9 @@ int cluster_handle_join_req(ClusterManager *cm,
     n->node_id[36] = '\0';
     strncpy(n->ip_address, req->ip_address, 45);
     n->ip_address[45] = '\0';
-    n->tcp_port = req->tcp_port;
-    n->udp_port = req->udp_port;
-    n->role = req->role;
+    n->tcp_port = req_tcp_port;
+    n->udp_port = req_udp_port;
+    n->role = req_role;    
     n->status = NODE_STATUS_ALIVE;
     n->last_updated_ts = time(NULL);
     
@@ -327,6 +335,9 @@ void cluster_leave(ClusterManager *cm) {
     int attempt_count = 0;
     
     for (size_t i = 0; i < cm->member_count && sent_count < 3; i++) {
+        if (strcmp(cm->members[i].node_id, cm->self.node_id) == 0) {
+            continue;
+        }
         if (cm->members[i].status == NODE_STATUS_ALIVE) {
             attempt_count++;
             TcpConnection conn;
