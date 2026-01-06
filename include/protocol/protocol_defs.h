@@ -43,6 +43,7 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     uint32_t status;
     uint32_t member_count;
+    char responder_id[37];
 } JoinResponseHeader;
 
 // NEW: Header for Rule Synchronization
