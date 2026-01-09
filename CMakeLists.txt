@@ -69,7 +69,10 @@ add_test(NAME UDP_Test COMMAND test_udp)
 # Raft Consensus Test (NEW)
 add_executable(test_raft 
     tests/test_raft.c 
-    ${SRC_RAFT} 
+    ${SRC_RAFT}
+    ${SRC_TRANSPORT} 
+    ${SRC_PROTO}     
+    ${SRC_CLUSTER} 
     ${SRC_COMMON}
 )
 target_link_libraries(test_raft pthread)

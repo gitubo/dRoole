@@ -487,6 +487,9 @@ void rpc_on_client_event(void *context, int fd, uint32_t events) {
                 result = handle_processing(session);
                 // After processing, we are in SENDING_RESPONSE or DONE.
                 // We usually stop here to wait for the WRITE event (registered in handle_processing).
+                if (session->state == SESSION_SENDING_RESPONSE) {
+                    keep_processing = 1;
+                }
                 break;
             
             case SESSION_SENDING_RESPONSE:

@@ -402,3 +402,17 @@ int example_submit_write(RaftNode *node, const char *key,
     
     return raft_submit(node, (const uint8_t *)&cmd, sizeof(cmd));
 }
+
+int raft_send_request_vote(RaftNode *raft, NodeInfo *target) {
+    // 1. Create the RequestVote message
+    RequestVoteRequest req = {
+        .term = raft->current_term,
+        .candidate_id = raft->node_id,
+        .last_log_index = raft->last_log_index,
+        .last_log_term = raft->last_log_term
+    };
+
+    // 2. Serialize and send via the TCP transport
+    // We reuse the existing RPC infrastructure
+    return rpc_send_request(target->ip_address, target->tcp_port, RPC_CMD_RAFT_VOTE, &req);
+}

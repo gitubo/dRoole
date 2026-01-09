@@ -161,11 +161,27 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+
+    const char *node_id = "default";
+    uint16_t port = 9000;
+    NodeRole role = ROLE_WORKER_NODE;
+    const char *join_addr = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--node-id") == 0 && i + 1 < argc) {
+            node_id = argv[++i];
+        } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+            port = (uint16_t)atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--role") == 0 && i + 1 < argc) {
+            if (strcmp(argv[++i], "CONTROL") == 0) role = ROLE_CONTROL;
+            else role = ROLE_WORKER;
+        } else if (strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
+            join_addr = argv[++i]; // e.g., "127.0.0.1:9000"
+        }
+    }
+
     NodeContext ctx;
     memset(&ctx, 0, sizeof(ctx));
-
-    const char *node_id = argv[1];
-    uint16_t port = (uint16_t)atoi(argv[2]);
     
     // Corrected Enum Names from include/common/types.h
     NodeRole role = (strcmp(argv[3], "-c") == 0) 
@@ -205,9 +221,21 @@ int main(int argc, char *argv[]) {
     }
 
     // 5. Register Event Handlers
+
+    typedef struct {
+        EventLoop *loop;
+        void *app_context;
+    } RpcServerContext;
+
+    // Allocate this on the heap or add it to NodeContext to ensure it persists
+    RpcServerContext *rpc_ctx = malloc(sizeof(RpcServerContext));
+    rpc_ctx->loop = loop;
+    rpc_ctx->app_context = &ctx.cluster;
+
     // RPC Server Acceptor
-    if (loop_add_fd(loop, ctx.tcp_server_fd, EVENT_READ, rpc_on_accept, &ctx) != 0) { 
+    if (loop_add_fd(loop, ctx.tcp_server_fd, EVENT_READ, rpc_on_accept, rpc_ctx) != 0) { 
         LOG_ERR("Failed to add TCP server to event loop");
+        free(rpc_ctx);
         // Cleanup and exit...
     }
     

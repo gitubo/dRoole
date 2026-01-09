@@ -85,8 +85,17 @@ int cluster_handle_join_req(ClusterManager *cm,
     LOG_DEBUG("Handling JOIN_REQ: node_id=%s, ip=%s, tcp_port=%d, udp_port=%d, role=%d",
               req->node_id, req->ip_address, req_tcp_port, req_udp_port, req_role);
 
+    // ✅ ADD: Check for null pointers
+    if (!cm || !req || !out_payload || !out_len) {
+        LOG_ERR("NULL pointer in cluster_handle_join_req");
+        return -1;
+    }
+    
+    LOG_DEBUG("Checking %zu existing members", cm->member_count);
+
     // 1. Check if node already exists or needs update
     for (size_t i = 0; i < cm->member_count; i++) {
+        LOG_DEBUG("  Comparing with member %zu: %s", i, cm->members[i].node_id);
         if (strcmp(cm->members[i].node_id, req->node_id) == 0) {
             LOG_WARN("Node %s already exists in cluster, updating info", req->node_id);
             // Update existing node
@@ -101,13 +110,19 @@ int cluster_handle_join_req(ClusterManager *cm,
         }
     }
     
+    LOG_DEBUG("Node not found, adding as new member");
+    
     // 2. Add new node if capacity allows
+    LOG_DEBUG("Current capacity: count=%zu, capacity=%zu", cm->member_count, cm->member_capacity);
     ensure_capacity(cm);
+    LOG_DEBUG("After ensure_capacity: count=%zu, capacity=%zu", cm->member_count, cm->member_capacity);
+    
     if (cm->member_count >= cm->member_capacity) {
         LOG_ERR("Failed to expand member list, cannot add node %s", req->node_id);
         return -1;
     }
     
+    LOG_DEBUG("Allocating member slot %zu", cm->member_count);
     NodeInfo *n = &cm->members[cm->member_count++];
     memset(n, 0, sizeof(*n));
     strncpy(n->node_id, req->node_id, 36);
@@ -123,6 +138,8 @@ int cluster_handle_join_req(ClusterManager *cm,
     LOG_INFO("Added new member: %s (total members: %zu)", req->node_id, cm->member_count);
 
 build_response:
+    LOG_DEBUG("Building response, member_count=%zu", cm->member_count);
+    
     // 3. Construct Response
     *out_len = sizeof(JoinResponseHeader) + cm->member_count * sizeof(NodeInfo);
     
@@ -131,11 +148,10 @@ build_response:
         .member_count = htonl(cm->member_count)
     };
 
-    // [FIX] Explicitly copy our own Node ID into the response header
-    // This allows the joining node to know exactly who we are (e.g., "seed-01")
     strncpy(hdr.responder_id, cm->self.node_id, sizeof(hdr.responder_id) - 1);
     hdr.responder_id[sizeof(hdr.responder_id) - 1] = '\0';
 
+    LOG_DEBUG("Allocating %zu bytes for response", *out_len);
     *out_payload = malloc(*out_len);
     if (!*out_payload) {
         LOG_ERR("Failed to allocate %zu bytes for JOIN_RESP", *out_len);
@@ -144,6 +160,8 @@ build_response:
 
     // Copy Header
     memcpy(*out_payload, &hdr, sizeof(hdr));
+    
+    LOG_DEBUG("Serializing %zu members", cm->member_count);
     
     // Copy Member List
     uint8_t *member_ptr = *out_payload + sizeof(hdr);
